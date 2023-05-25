@@ -7,6 +7,8 @@ from langchain.chains import RetrievalQA
 from langchain.document_loaders import TextLoader
 from langchain.document_loaders import DirectoryLoader
 from langchain.document_loaders import PyPDFLoader
+from langchain.chains.question_answering import load_qa_chain
+from colorama import Fore, Back, Style
 from dotenv import load_dotenv
 import os
 import streamlit as st
@@ -33,7 +35,8 @@ loader = DirectoryLoader(PAPER_DIRECTORY, glob="./*.pdf", loader_cls=PyPDFLoader
 st.title("PDF questions")
 file = st.file_uploader("Upload a PDF file", accept_multiple_files=False, type=["pdf"])
 
-if (file or os.getenv('DEBUG_EMBED') == 'y') and not os.path.exists(file.name):
+if (file or os.getenv('DEBUG_EMBED') == 'y') and not os.path.exists(PAPER_DIRECTORY + file.name):
+    
     with open(PAPER_DIRECTORY + file.name, "wb+") as f:
         f.write(file.read())
 
@@ -62,18 +65,27 @@ if os.getenv('DEBUG_MODE') == "y":
 else:
     query = st.text_input("Enter a question:")
 
-if query or os.getenv('DEBUG_MODE') == "y":
+if len(query) > 1 or (os.getenv('DEBUG_MODE') == "y"):
     # Now we can load the persisted database from disk, and use it as normal. 
     vectordb = Chroma(persist_directory=persist_directory, embedding_function=embedding)              
     retriever = vectordb.as_retriever()
     
-    chat = ChatOpenAI(temperature=0.9)
+    chat = ChatOpenAI(model_name=os.getenv('LLM_MODEL'), temperature=os.getenv('TEMPERATURE'))
+    
+    messages = [
+    SystemMessage(content="You are an AI research assistant. You use a tone that is technical and scientific.")
+    ]
     
     docs = retriever.get_relevant_documents(query)
-    qa = RetrievalQA.from_chain_type(llm=chat, chain_type="stuff", retriever=retriever, verbose=True)
+    
+    qa = RetrievalQA.from_chain_type(llm=chat, chain_type="stuff", 
+                                     retriever=retriever, 
+                                     chain_type_kwargs={"verbose":True})
+        
     answer = qa.run(query)
 
     if os.getenv('DEBUG_MODE') == "y":
-        print("Answer: ", answer)
+        print(Fore.BLUE + "Answer: " + answer)
+        print(Style.RESET_ALL)
     else:
         st.write("Answer: ", answer)

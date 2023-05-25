@@ -8,8 +8,8 @@ from langchain.document_loaders import TextLoader
 from langchain.document_loaders import DirectoryLoader
 from langchain.document_loaders import PyPDFLoader
 from dotenv import load_dotenv
-import streamlit as st
 import os
+import streamlit as st
 from langchain.schema import (
     AIMessage,
     HumanMessage,
@@ -19,7 +19,6 @@ from langchain.schema import (
 PAPER_DIRECTORY = "./papers/"
 load_dotenv()
 
-# TODO: if file exists don't process it
 # TODO: change embedding to universal sentence loader
 # TODO: use faiss semantic search
 
@@ -29,15 +28,12 @@ persist_directory = 'db'
 
 ## here we are using OpenAI embeddings but in future we will swap out to local embeddings
 embedding = OpenAIEmbeddings()
-
-st.title("PDF questions")
-
-
-file = st.file_uploader("Upload a PDF file", accept_multiple_files=False, type=["pdf"])
-
 loader = DirectoryLoader(PAPER_DIRECTORY, glob="./*.pdf", loader_cls=PyPDFLoader)
 
-if file and not os.path.exists(file.name):
+st.title("PDF questions")
+file = st.file_uploader("Upload a PDF file", accept_multiple_files=False, type=["pdf"])
+
+if (file or os.getenv('DEBUG_EMBED') == 'y') and not os.path.exists(file.name):
     with open(PAPER_DIRECTORY + file.name, "wb+") as f:
         f.write(file.read())
 
@@ -60,18 +56,24 @@ if file and not os.path.exists(file.name):
     vectordb.persist()
     vectordb = None
 
-query = st.text_input("Enter a question:")
 
-if query:
+if os.getenv('DEBUG_MODE') == "y":
+    query = os.getenv('DEBUG_QUERY')
+else:
+    query = st.text_input("Enter a question:")
+
+if query or os.getenv('DEBUG_MODE') == "y":
     # Now we can load the persisted database from disk, and use it as normal. 
     vectordb = Chroma(persist_directory=persist_directory, embedding_function=embedding)              
     retriever = vectordb.as_retriever()
     
     chat = ChatOpenAI(temperature=0.9)
     
-    
     docs = retriever.get_relevant_documents(query)
     qa = RetrievalQA.from_chain_type(llm=chat, chain_type="stuff", retriever=retriever, verbose=True)
     answer = qa.run(query)
 
-    st.write("Answer: ", answer)
+    if os.getenv('DEBUG_MODE') == "y":
+        print("Answer: ", answer)
+    else:
+        st.write("Answer: ", answer)

@@ -3,11 +3,13 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.llms import OpenAI
 from langchain.chat_models import ChatOpenAI
+from langchain.chains import FlareChain
 from langchain.chains import RetrievalQA
 from langchain.document_loaders import TextLoader
 from langchain.document_loaders import DirectoryLoader
 from langchain.document_loaders import PyPDFLoader
 from langchain.chains.question_answering import load_qa_chain
+from langchain.prompts import PromptTemplate
 from colorama import Fore, Back, Style
 from dotenv import load_dotenv
 import os
@@ -20,6 +22,10 @@ from langchain.schema import (
 
 PAPER_DIRECTORY = "./papers/"
 load_dotenv()
+
+model_name = os.getenv('LLM_MODEL')
+debug_mode = (os.getenv('DEBUG_MODE') == "y")
+temerature = os.getenv('TEMPERATURE')
 
 # TODO: change embedding to universal sentence loader
 # TODO: use faiss semantic search
@@ -60,31 +66,27 @@ if (file or os.getenv('DEBUG_EMBED') == 'y') and not os.path.exists(PAPER_DIRECT
     vectordb = None
 
 
-if os.getenv('DEBUG_MODE') == "y":
+if debug_mode:
     query = os.getenv('DEBUG_QUERY')
 else:
     query = st.text_input("Enter a question:")
 
-if len(query) > 1 or (os.getenv('DEBUG_MODE') == "y"):
+if len(query) > 1 or debug_mode:
     # Now we can load the persisted database from disk, and use it as normal. 
     vectordb = Chroma(persist_directory=persist_directory, embedding_function=embedding)              
     retriever = vectordb.as_retriever()
     
-    chat = ChatOpenAI(model_name=os.getenv('LLM_MODEL'), temperature=os.getenv('TEMPERATURE'))
-    
-    messages = [
-    SystemMessage(content="You are an AI research assistant. You use a tone that is technical and scientific.")
-    ]
-    
+    chat = ChatOpenAI(model_name=model_name, temperature=temerature)
+
     docs = retriever.get_relevant_documents(query)
-    
+
     qa = RetrievalQA.from_chain_type(llm=chat, chain_type="stuff", 
                                      retriever=retriever, 
                                      chain_type_kwargs={"verbose":True})
-        
+    
     answer = qa.run(query)
 
-    if os.getenv('DEBUG_MODE') == "y":
+    if debug_mode:
         print(Fore.BLUE + "Answer: " + answer)
         print(Style.RESET_ALL)
     else:
